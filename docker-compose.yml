@@ -1,0 +1,14 @@
+version: "2.4"
+services:
+  mn:
+    restart: always
+    init: true
+    build: ./container
+    volumes:
+      - "./data:/home/akroma/.akroma:rw"
+    pids_limit: 75
+    ports:
+      - "10000:8545"
+      - "30303:30303"
+#    security_opt:
+#      - apparmor=aka-armor

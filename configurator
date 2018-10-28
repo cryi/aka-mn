@@ -1,0 +1,236 @@
+#!/bin/sh
+PATHTOCONFIGURATOR=$(readlink -f "$0")
+BASEDIR=$(dirname "$PATHTOCONFIGURATOR")
+script_usage() {
+    cat << EOF
+                    == AKROMA MN CONFIGURATOR ==
+
+Usage:
+    -h|--help                   Displays this help message.
+
+    -gd|--grant-docker          Adds current user into docker group, so you can use cli without sudo
+    -dau|--disable-auto-update  Removes auto update from cron job
+
+    -f|--full                   Runs all of the commands below.
+
+    -sd|--setup-dependencies    Installs masternode dependencies
+    -mn|--setup-masternode      Rebuilds and starts masternode
+    -rb|--rebuild               Same as -mn|--setup-masternode 
+    -nc|--no-cache              Affects MN build
+    -r|--restart                Restarts masternode
+    -u|--update                 Upgrades akroma masternode to latest stable version
+    -rp|--restore-permissions   Restores required chmod +x and directory permissions
+    -i|--node-info              Prints node information - enodeid, version
+    -au|--auto-update           Adds cron job for auto update
+                                * also grants docker rights for current user
+EOF
+}
+
+success() {
+    echo "\033[0;32m$1\033[0m"
+}
+
+info() {
+    echo "\033[0;36m$1\033[0m"
+}
+
+warn() {
+    echo "\033[0;33m$1\033[0m"
+}
+
+error() {
+    echo "\033[0;31m$1\033[0m"
+}
+
+require_root_priv() {
+    if [ ! `id -u` = 0 ] ; then
+        error "This option requires root (or sudo) privilages"
+        exit 1
+    fi
+}
+
+require_docker_priv() {
+    if [ "$(groups | grep "docker" || echo "true")" = "true" ] ; then
+        error "This option requires docker privilages. Either run configurator as root or grant user docker privilages."
+        info "HINT: sudo ./configurator --grant-docker"
+        exit 2
+    fi
+}
+
+build_mn() {
+    echo "Building aka masternode..."
+    require_docker_priv
+    docker-compose -f $BASEDIR/docker-compose.yml build $noCache
+}
+
+start_mn() {
+    echo "Starting aka masternode..."
+    require_docker_priv
+    docker-compose -f $BASEDIR/docker-compose.yml up -d --force-recreate && \
+        echo "waiting (15s) for MN to start..."
+        sleep 15
+    info=true
+}
+
+parse_params() {
+    while :; do
+        case $1 in
+            -h|--help)
+                script_usage
+                exit 0
+                ;;
+            -f|--full)
+                force=true
+                noCache="--no-cache"
+                shift
+                ;;
+            -sd|--setup-dependencies)
+                dependencies=true
+                shift
+                ;;
+            -mn|--setup-masternode)
+                build=true
+                start=true
+                shift
+                ;; 
+            -rb|--rebuild)
+                build=true
+                start=true
+                shift
+                ;; 
+            -r|--restart)
+                start=true
+                shift
+                ;;        
+            -u|--update)
+                update=true
+                shift
+                ;;
+            -au|--auto-update)
+                autoUpdate=true
+                grantDocker=true
+                shift
+                ;;
+            -dau|--disable-auto-update)
+                disableAutoUpdate=true
+                shift
+                ;;
+            -nu|--no-update)
+                noupdate=true
+                shift
+                ;;
+            -rp|--restore-permissions)
+                restorePermisions=true
+                shift
+                ;;
+            -gd|--grant-docker)
+                grantDocker=true
+                shift
+                ;;
+            -nc|--no-cache)
+                noCache="--no-cache"
+                shift
+                ;;
+            -i|--node-info)
+                info=true
+                shift
+                ;;
+            -?*)
+                echo "Invalid parameter was provided: $1"
+                exit 2
+                ;;
+            *)
+                break;
+        esac
+    done
+}
+parse_params "$@"
+
+USER=$(who am i | awk '{print $1}')
+
+if [ "$force" = "true" ] || [ "$dependencies" = "true" ]; then
+    require_root_priv
+    apt update && apt upgrade -q -y
+    apt install -y apt-transport-https ca-certificates curl software-properties-common unzip jq
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
+    apt-key fingerprint 0EBFCD88
+    add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+    apt update && apt install -y docker-ce
+    docker run hello-world
+    curl -L https://github.com/docker/compose/releases/download/1.21.2/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
+    chmod +x /usr/local/bin/docker-compose
+    docker-compose --version
+fi
+
+if [ "$force" = "true" ] || [ "$restorePermisions" = "true" ]; then
+    require_root_priv
+    chmod +x $PATHTOCONFIGURATOR \
+        $BASEDIR/tools/allow-container-write.sh \
+        $BASEDIR/tools/get-node-info.sh
+    $BASEDIR/tools/allow-container-write.sh -f -p $BASEDIR/data
+fi
+
+if [ "$grantDocker" = "true" ]; then
+    needToSet=$(groups | grep "docker" || echo "true")
+    if [ "$needToSet" = "true" ]; then
+        require_root_priv
+        usermod -a -G docker $USER
+    fi
+fi
+
+if [ "$force" = "true" ] || [ "$build" = "true" ]; then
+    build_mn
+fi
+
+if [ "$force" = "true" ] || [ "$start" = "true" ]; then
+    start_mn
+fi
+
+if [ "$update" = "true" ]; then
+    require_docker_priv
+    echo "Checking for update..."
+    container=$(docker-compose -f $BASEDIR/docker-compose.yml ps -q)
+    if [ -z ${container} ]; then 
+        error "Cannot update non running masternode."
+        exit 3
+    fi
+    
+    if [ -f "$BASEDIR/data/node.info" ]; then
+        ver=$(docker exec -it $container curl -L -s "https://raw.githubusercontent.com/akroma-project/akroma/master/versions.json" | jq '.stable' --raw-output)
+        if grep -q "version: $ver" "$BASEDIR/data/node.info"; then
+            success "You are running latest stable version."
+        else 
+            echo "Updating to latest aka masternode..."
+            noCache="--no-cache"
+            build_mn
+            start_mn
+            if grep -q "version: $ver" "$BASEDIR/data/node.info"; then
+                success "Masternode updated to latest version."
+            else 
+                error "Failed to update masternode."
+            fi
+        fi
+    fi
+fi
+
+if [ "$force" = "true" ] || [ "$autoUpdate" = "true" ]; then
+    if [ ! "$disableAutoUpdate" = "true" ]; then
+        crontab -u $USER -l > "temp.cron"
+        grep "59 23 \* \* \* $PATHTOCONFIGURATOR -u" "temp.cron" > /dev/null || echo "59 23 * * * $PATHTOCONFIGURATOR -u" >> "temp.cron"
+        crontab -u $USER "temp.cron"
+        rm "temp.cron"
+        crontab -u $USER -l | grep "$PATHTOCONFIGURATOR -u" > /dev/null && success "Auto update configured." || error "Failed to configure auto update." 
+    fi
+fi
+
+if [ "$disableAutoUpdate" = "true" ]; then
+    crontab -u $USER -l | grep -v "$PATHTOCONFIGURATOR -u" | crontab -u $USER -
+    crontab -u $USER -l | grep "$PATHTOCONFIGURATOR -u" && error "Failed to disable auto update." || success "Auto updated disabled" 
+fi
+
+if [ "$force" = "true" ] || [ "$masternode" = "true" ] || [ "$info" = "true" ]; then
+    /bin/sh $BASEDIR/tools/get-node-info.sh
+    info "\
+    ** this node info was also saved into ./data/node.info ** \
+    "
+fi
