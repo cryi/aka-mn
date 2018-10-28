@@ -22,7 +22,7 @@ Usage:
     -rp|--restore-permissions   Restores required chmod +x and directory permissions
     -i|--node-info              Prints node information - enodeid, version
     -au|--auto-update           Adds cron job for auto update
-                                * also grants docker rights for current user
+                                * requires docker rights for current user (use -gd|--grant-docker)
 EOF
 }
 
@@ -108,7 +108,6 @@ parse_params() {
                 ;;
             -au|--auto-update)
                 autoUpdate=true
-                grantDocker=true
                 shift
                 ;;
             -dau|--disable-auto-update)
