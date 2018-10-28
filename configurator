@@ -6,23 +6,26 @@ script_usage() {
                     == AKROMA MN CONFIGURATOR ==
 
 Usage:
-    -h|--help                   Displays this help message.
+    -h|--help                           Displays this help message.
 
-    -gd|--grant-docker          Adds current user into docker group, so you can use cli without sudo
-    -dau|--disable-auto-update  Removes auto update from cron job
+    -gd|--grant-docker                  Adds CURRENT user into docker group, so you can control docker without sudo and autoupdate
+    -gd=[user]|--grant-docker=[user]    Adds SPECIFIC user into docker group, so you can control docker without sudo and autoupdate
+    -dau|--disable-auto-update          Removes auto update from cron job
 
-    -f|--full                   Runs all of the commands below.
+    -f|--full                           Runs all of the commands below.
 
-    -sd|--setup-dependencies    Installs masternode dependencies
-    -mn|--setup-masternode      Rebuilds and starts masternode
-    -rb|--rebuild               Same as -mn|--setup-masternode 
-    -nc|--no-cache              Affects MN build
-    -r|--restart                Restarts masternode
-    -u|--update                 Upgrades akroma masternode to latest stable version
-    -rp|--restore-permissions   Restores required chmod +x and directory permissions
-    -i|--node-info              Prints node information - enodeid, version
-    -au|--auto-update           Adds cron job for auto update
-                                * requires docker rights for current user (use -gd|--grant-docker)
+    -sd|--setup-dependencies            Installs masternode dependencies
+    -mn|--setup-masternode              Rebuilds and starts masternode
+    -rb|--rebuild                       Same as -mn|--setup-masternode 
+    -nc|--no-cache                      Affects MN build
+    -r|--restart                        Restarts masternode
+    -u|--update                         Upgrades akroma masternode to latest stable version
+    -rp|--restore-permissions           Restores required chmod +x and directory permissions
+    -i|--node-info                      Prints node information - enodeid, version
+    -au|--auto-update                   Adds cron job for auto update
+                                        * requires docker rights for current user (use -gd|--grant-docker)
+    -au=[user]|--auto-update=[user]     Adds cron job for auto update to SPECIFIC user crontable
+                                        * requires docker rights for SPECIFIC user (use -gd=[user]|--grant-docker=[user])
 EOF
 }
 
@@ -50,7 +53,7 @@ require_root_priv() {
 }
 
 require_docker_priv() {
-    if [ "$(groups | grep "docker" || echo "true")" = "true" ] ; then
+    if [ "$(groups | grep "docker" || echo "true")" = "true" ] && [ "$(groups | grep "root" || echo "true")" = "true" ]; then
         error "This option requires docker privilages. Either run configurator as root or grant user docker privilages."
         info "HINT: sudo ./configurator --grant-docker"
         exit 2
@@ -110,6 +113,12 @@ parse_params() {
                 autoUpdate=true
                 shift
                 ;;
+            -au=*|--auto-update=*)
+                autoUpdate=true
+                SPECIFIC_USER=$(echo $1 | sed 's/-au=//g')
+                SPECIFIC_USER=$(echo $SPECIFIC_USER | sed 's/--auto-update=//g')
+                shift
+                ;;           
             -dau|--disable-auto-update)
                 disableAutoUpdate=true
                 shift
@@ -124,6 +133,12 @@ parse_params() {
                 ;;
             -gd|--grant-docker)
                 grantDocker=true
+                shift
+                ;;
+            -gd=*|--grant-docker=*)
+                grantDocker=true
+                SPECIFIC_USER=$(echo $1 | sed 's/-gd=//g')
+                SPECIFIC_USER=$(echo $SPECIFIC_USER | sed 's/--grant-docker=//g')
                 shift
                 ;;
             -nc|--no-cache)
@@ -146,6 +161,9 @@ parse_params() {
 parse_params "$@"
 
 USER=$(who am i | awk '{print $1}')
+if [ ! -z ${SPECIFIC_USER} ]; then 
+    USER=$SPECIFIC_USER
+fi
 
 if [ "$force" = "true" ] || [ "$dependencies" = "true" ]; then
     require_root_priv
@@ -170,10 +188,16 @@ if [ "$force" = "true" ] || [ "$restorePermisions" = "true" ]; then
 fi
 
 if [ "$grantDocker" = "true" ]; then
-    needToSet=$(groups | grep "docker" || echo "true")
-    if [ "$needToSet" = "true" ]; then
+    if [ "$(groups $USER | grep "docker" || echo "true")" = "true" ] && [ "$(groups $USER | grep "root" || echo "true")" = "true" ]; then
         require_root_priv
         usermod -a -G docker $USER
+        if [ "$(groups $USER | grep "docker" || echo "true")" = "true" ] && [ "$(groups $USER | grep "root" || echo "true")" = "true" ]; then
+            error "Failed to set docker privilages for user $USER"
+        else 
+            success "Docker privilages granted to $USER"  
+        fi
+    else 
+        success "Docker privilages are already granted to $USER"
     fi
 fi
 
@@ -219,6 +243,10 @@ if [ "$force" = "true" ] || [ "$autoUpdate" = "true" ]; then
         crontab -u $USER "temp.cron"
         rm "temp.cron"
         crontab -u $USER -l | grep "$PATHTOCONFIGURATOR -u" > /dev/null && success "Auto update configured." || error "Failed to configure auto update." 
+        if [ "$(groups $USER | grep "docker" || echo "true")" = "true" ] && [ "$(groups $USER | grep "root" || echo "true")" = "true" ]; then
+            warn "User $USER does not have docker privilages and wont be able to auto update."
+            info "HINT: sudo ./configurator --grant-docker $USER"
+        fi
     fi
 fi
 
