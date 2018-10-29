@@ -4,8 +4,8 @@
 
 0. `cd [path to directory containing this readme]`
 1. one of commands below depending of your preference
-    `sudo /bin/sh ./configurator --full` # full setup on current user
-    `sudo ./configurator --full --user=[user] --port=[port]` # full setup on defined user with specific port (directory location and structure is preserved)
+    - `sudo /bin/sh ./configurator --full` # full setup on current user
+    - `sudo ./configurator --full --user=[user] --port=[port]` # full setup on defined user with specific port (directory location and structure is preserved)
 2. register your akroma node on https://akroma.io/
     - setup outputs node info at the end, you can also find it inside file `./data/node.info` (`cat ./data/node.info`)
 
