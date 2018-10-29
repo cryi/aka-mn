@@ -1,6 +1,8 @@
 #!/bin/sh
 PATHTOCONFIGURATOR=$(readlink -f "$0")
 BASEDIR=$(dirname "$PATHTOCONFIGURATOR")
+composeFile="$BASEDIR/docker-compose.yml"
+
 script_usage() {
     cat << EOF
                     == AKROMA MN CONFIGURATOR ==
@@ -8,9 +10,12 @@ script_usage() {
 Usage:
     -h|--help                           Displays this help message.
 
+    -dau|--disable-auto-update          Removes auto update from cron job
     -gd|--grant-docker                  Adds CURRENT user into docker group, so you can control docker without sudo and autoupdate
     -gd=[user]|--grant-docker=[user]    Adds SPECIFIC user into docker group, so you can control docker without sudo and autoupdate
-    -dau|--disable-auto-update          Removes auto update from cron job
+    -p=[port]|--port=[port]             Sets MN rpc listening port to [port]
+
+    --user=[user]                       Creates user if not exists and starts docker from this user. (docker rights are asigned automatically)
 
     -f|--full                           Runs all of the commands below.
 
@@ -26,6 +31,19 @@ Usage:
                                         * requires docker rights for current user (use -gd|--grant-docker)
     -au=[user]|--auto-update=[user]     Adds cron job for auto update to SPECIFIC user crontable
                                         * requires docker rights for SPECIFIC user (use -gd=[user]|--grant-docker=[user])
+
+    EXAMPLES:
+    # setup as root
+    1. setup as root with autoupdate
+    ./configurator -f
+    2. setup as root, running on [user] with autoupdate, on port [port]
+    ./configurator -f --user=[user] --port=[port]
+
+    # setup as non root (requires sudo)
+    1. setup as non root for current user with autoupdate
+    sudo ./configurator -f
+    2. setup as non root, running on [user] with autoupdate, on port [port]
+    sudo ./configurator -f --user=[user] --port=[port]
 EOF
 }
 
@@ -62,17 +80,26 @@ require_docker_priv() {
 
 build_mn() {
     echo "Building aka masternode..."
-    require_docker_priv
-    docker-compose -f $BASEDIR/docker-compose.yml build $noCache
+    if [ ! "$user" = "true" ]; then
+        require_docker_priv
+        docker-compose -f $composeFile build $noCache
+    fi
 }
 
 start_mn() {
     echo "Starting aka masternode..."
-    require_docker_priv
-    docker-compose -f $BASEDIR/docker-compose.yml up -d --force-recreate && \
-        echo "waiting (15s) for MN to start..."
+    if [ ! "$user" = "true" ]; then
+        require_docker_priv
+        docker-compose -f $composeFile up -d --force-recreate && \
+            echo "waiting (15s) for MN to start..."
         sleep 15
-    info=true
+        info=true
+    fi
+}
+
+set_mn_port() {
+    temp=$(sed "s/.*- \".*:8545\".*/      - \"$1:8545\"/" $composeFile)
+    echo "$temp" > $composeFile
 }
 
 parse_params() {
@@ -149,6 +176,17 @@ parse_params() {
                 info=true
                 shift
                 ;;
+            -p=*|--port=*)
+                port=$(echo $1 | sed 's/-p=//g')
+                port=$(echo $port | sed 's/--port=//g')
+                shift
+                ;;
+            --user=*)
+                user=true
+                grantDocker=true
+                SPECIFIC_USER=$(echo $1 | sed 's/--user=//g')
+                shift
+                ;;
             -?*)
                 echo "Invalid parameter was provided: $1"
                 exit 2
@@ -162,7 +200,13 @@ parse_params "$@"
 
 USER=$(who am i | awk '{print $1}')
 if [ ! -z ${SPECIFIC_USER} ]; then 
-    USER=$SPECIFIC_USER
+    USER=$SPECIFIC_USER 
+fi
+
+if [ "$user" = "true" ]; then
+    require_root_priv
+    id -u $USER > /dev/null || useradd $USER -m -s /bin/sh && usermod -a -G docker $USER
+    id -u $USER > /dev/null && success "$USER created." || (error "Failed to create $USER" && exit 4)
 fi
 
 if [ "$force" = "true" ] || [ "$dependencies" = "true" ]; then
@@ -185,6 +229,11 @@ if [ "$force" = "true" ] || [ "$restorePermisions" = "true" ]; then
         $BASEDIR/tools/allow-container-write.sh \
         $BASEDIR/tools/get-node-info.sh
     $BASEDIR/tools/allow-container-write.sh -f -p $BASEDIR/data
+fi
+
+if [ ! -z ${port} ]; then 
+    set_mn_port $port
+    grep "\- \"$port:8545\"" $composeFile > /dev/null && success "Set MN port to $port" || (error "Failed to set MN port to $port" && exit 5)
 fi
 
 if [ "$grantDocker" = "true" ]; then
@@ -253,6 +302,16 @@ fi
 if [ "$disableAutoUpdate" = "true" ]; then
     crontab -u $USER -l | grep -v "$PATHTOCONFIGURATOR -u" | crontab -u $USER -
     crontab -u $USER -l | grep "$PATHTOCONFIGURATOR -u" && error "Failed to disable auto update." || success "Auto updated disabled" 
+fi
+
+if [ "$user" = "true" ]; then
+    if [ "$force" = "true" ] || [ "$build" = "true" ]; then
+        runuser -l $USER -c "sh $PATHTOCONFIGURATOR -mn"
+        exit 0
+    elif [ "$start" = "true" ]; then
+        runuser -l $USER -c "sh $PATHTOCONFIGURATOR -s"
+        exit 0
+    fi
 fi
 
 if [ "$force" = "true" ] || [ "$masternode" = "true" ] || [ "$info" = "true" ]; then

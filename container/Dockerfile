@@ -4,6 +4,13 @@ FROM ubuntu:bionic
 RUN apt-get update && apt-get upgrade -q -y
 RUN apt-get install wget curl libjemalloc1 unzip jq -y
 
+HEALTHCHECK --interval=5s --timeout=1s --retries=5 \
+  CMD curl -X POST  --url http://localhost:8545 \
+   					--header 'Cache-Control: no-cache' \
+				   	--header 'Content-Type: application/json' \
+				  	--data '{"jsonrpc":"2.0","method":"web3_clientVersion","params":[],"id":67}' \
+					--silent -k --fail || exit 1
+
 # create user
 RUN adduser --disabled-login \
  	 --disabled-password \
