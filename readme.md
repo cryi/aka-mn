@@ -1,4 +1,4 @@
-# AKROMA MASTERNODE SETUP © cryon.io 2018
+# AKROMA FULL/BOOT MASTERNODE SETUP © cryon.io 2018
 
 ## Automated setup (ubuntu and derivatives with apt & sudo)
 
