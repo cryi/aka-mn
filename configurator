@@ -233,7 +233,7 @@ fi
 
 if [ ! -z ${port} ]; then 
     set_mn_port $port
-    grep "\- \"$port:8545\"" $composeFile > /dev/null && success "Set MN port to $port" || (error "Failed to set MN port to $port" && exit 5)
+    grep "\- \"$port:8545\"" $composeFile > /dev/null && success "MN port set to $port" || (error "Failed to set MN port to $port" && exit 5)
 fi
 
 if [ "$grantDocker" = "true" ]; then
