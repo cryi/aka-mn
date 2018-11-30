@@ -34,13 +34,6 @@ RUN rm -f ./geth-akroma.zip
 RUN cp ./geth /usr/sbin/geth-akroma
 RUN chmod +x /usr/sbin/geth-akroma
 
-# save node info
-RUN mkdir -p /home/akroma/.akroma
-RUN echo "  == AKA MASTERNODE DETAILS ==  \
-version: $(./get-version.sh) \
-" > /home/akroma/.akroma/node.info
-
-
 # run aka masternode
 USER akroma
 ENTRYPOINT [ "/usr/sbin/geth-akroma", "--masternode", "--rpcvhosts", "*" ] 

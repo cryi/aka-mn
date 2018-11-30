@@ -2,6 +2,7 @@
 PATHTOCONFIGURATOR=$(readlink -f "$0")
 BASEDIR=$(dirname "$PATHTOCONFIGURATOR")
 composeFile="$BASEDIR/docker-compose.yml"
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 script_usage() {
     cat << EOF
@@ -93,6 +94,8 @@ start_mn() {
         docker-compose -f $composeFile up -d --force-recreate && \
             echo "waiting (15s) for MN to start..."
         sleep 15
+        # update node info
+        $BASEDIR/tools/get-node-info.sh > /dev/null
         info=true
     fi
 }
@@ -199,12 +202,13 @@ parse_params() {
 parse_params "$@"
 
 USER=$(who am i | awk '{print $1}')
-if [ ! -z ${SPECIFIC_USER} ]; then 
+if [ ! -z "$SPECIFIC_USER" ]; then 
     USER=$SPECIFIC_USER 
 fi
 
 if [ "$user" = "true" ]; then
-    require_root_priv
+    require_root_priv 
+    grep -q docker /etc/group || groupadd docker
     id -u $USER > /dev/null || useradd $USER -m -s /bin/sh && usermod -a -G docker $USER
     id -u $USER > /dev/null && success "$USER created." || (error "Failed to create $USER" && exit 4)
 fi
@@ -231,7 +235,7 @@ if [ "$force" = "true" ] || [ "$restorePermisions" = "true" ]; then
     $BASEDIR/tools/allow-container-write.sh -f -p $BASEDIR/data
 fi
 
-if [ ! -z ${port} ]; then 
+if [ ! -z "$port" ]; then 
     set_mn_port $port
     grep "\- \"$port:8545\"" $composeFile > /dev/null && success "MN port set to $port" || (error "Failed to set MN port to $port" && exit 5)
 fi
@@ -262,13 +266,13 @@ if [ "$update" = "true" ]; then
     require_docker_priv
     echo "Checking for update..."
     container=$(docker-compose -f $BASEDIR/docker-compose.yml ps -q)
-    if [ -z ${container} ]; then 
+    if [ -z "$container" ]; then 
         error "Cannot update non running masternode."
         exit 3
     fi
     
     if [ -f "$BASEDIR/data/node.info" ]; then
-        ver=$(docker exec -it $container curl -L -s "https://raw.githubusercontent.com/akroma-project/akroma/master/versions.json" | jq '.stable' --raw-output)
+        ver=$(docker exec $container curl -L -s "https://raw.githubusercontent.com/akroma-project/akroma/master/versions.json" | jq '.stable' --raw-output)
         if grep -q "version: $ver" "$BASEDIR/data/node.info"; then
             success "You are running latest stable version."
         else 
@@ -317,6 +321,6 @@ fi
 if [ "$force" = "true" ] || [ "$masternode" = "true" ] || [ "$info" = "true" ]; then
     /bin/sh $BASEDIR/tools/get-node-info.sh
     info "\
-    ** this node info was also saved into ./data/node.info ** \
+    ** this node info was also saved into $BASEDIR/data/node.info ** \
     "
 fi
