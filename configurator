@@ -29,9 +29,10 @@ Usage:
     -rp|--restore-permissions           Restores required chmod +x and directory permissions
     -i|--node-info                      Prints node information - enodeid, version
     -au|--auto-update                   Adds cron job for auto update
-                                        * requires docker rights for current user (use -gd|--grant-docker)
+                                        * assigns docker rights for current user
     -au=[user]|--auto-update=[user]     Adds cron job for auto update to SPECIFIC user crontable
-                                        * requires docker rights for SPECIFIC user (use -gd=[user]|--grant-docker=[user])
+                                        * assigns docker rights for SPECIFIC user
+                                        * same as --user=[user] --auto-update 
 
     EXAMPLES:
     # setup as root
@@ -241,7 +242,7 @@ if [ ! -z "$port" ]; then
     grep "\- \"$port:8545\"" $composeFile > /dev/null && success "MN port set to $port" || (error "Failed to set MN port to $port" && exit 5)
 fi
 
-if [ "$grantDocker" = "true" ]; then
+if [ "$force" = "true" ] && [ ! "$disableAutoUpdate" = "true" ] || [ "$grantDocker" = "true" ]; then
     if [ "$(groups $USER | grep "docker" || echo "true")" = "true" ] && [ "$(groups $USER | grep "root" || echo "true")" = "true" ]; then
         require_root_priv
         usermod -a -G docker $USER

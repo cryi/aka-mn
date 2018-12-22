@@ -2,6 +2,7 @@
 
 ## Automated setup (ubuntu and derivatives with apt & sudo)
 
+Note: *All parameters inside [] has to be submitted without [], e.g. `--user=[user]` as `--user=akroma`*
 0. `cd [path to directory containing this readme]`
 1. one of commands below depending of your preference
     - `sudo /bin/sh ./configurator --full` # full setup on current user
