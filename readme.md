@@ -1,6 +1,8 @@
-# AKROMA FULL/BOOT MASTERNODE SETUP © cryon.io 2018
+(Deprecated) It is not possible to create AKA masternodes anymore. Setup will be updated, once AKA team implements necessary changes for masternodes to return. (*You can still use this setup to setup standard akroma node - no rewards - to support AKA decentralization.*) 
 
-## Automated setup (ubuntu and derivatives with apt & sudo)
+## AKROMA FULL/BOOT MASTERNODE SETUP © cryon.io 2018
+
+### Automated setup (ubuntu and derivatives with apt & sudo)
 
 Note: *All parameters inside [] has to be submitted without [], e.g. `--user=[user]` as `--user=akroma`*
 0. `cd [path to directory containing this readme]`
@@ -10,11 +12,11 @@ Note: *All parameters inside [] has to be submitted without [], e.g. `--user=[us
 2. register your akroma node on https://akroma.io/
     - setup outputs node info at the end, you can also find it inside file `./data/node.info` (`cat ./data/node.info`)
 
-## Manual setup (other systems)
+### Manual setup (other systems)
 
-### WARNING: These steps may differ based on your OS. This setup is recommended ONLY for advanced users.
+#### WARNING: These steps may differ based on your OS. This setup is recommended ONLY for advanced users.
 
-#### install docker 
+##### install docker 
 0. install docker according to the official documentation (https://docs.docker.com/install/)
 
 1. install docker compose  
@@ -22,14 +24,14 @@ Note: *All parameters inside [] has to be submitted without [], e.g. `--user=[us
     - (only on unix based systems) `chmod +x /usr/local/bin/docker-compose`
 2.  `docker-compose --version` # Verifying if docker-compose works correctly
 
-#### setup && start masternode
+##### setup && start masternode
 0. set write permissions for user id 1000 for directory `./data`
     - on unix based systems with POSIX shell you can use: `sh ./tools/allow_container_write.sh -f -p ./data`
     - (non default) if you use user remap feature in docker, set allow write permission for user **remap id + 1000** 
 
 1. `docker-compose up -d` # builds and starts masternode
 
-## good to know
+### good to know
 - `docker-compose down`     # stops masternode
 - `docker-compose up`       # starts masternode with log output into console
 - `docker-compose up -d`    # starts masternode in detached mode (no console output)
